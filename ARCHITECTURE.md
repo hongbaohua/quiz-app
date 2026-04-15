@@ -12,12 +12,9 @@
 |------|------|
 | 前端／後端 | Streamlit（Python） |
 | 題庫格式 | Markdown（Obsidian 產出） |
-| 資料庫 | SQLite（本地開發） / Supabase（雲端部署） |
+| 資料庫 | Supabase（PostgreSQL，雲端持久化） |
 | 部署 | Streamlit Community Cloud |
 | 版本控制 | GitHub |
-
-> **注意**：Streamlit Community Cloud 的本地檔案系統為暫態，重新部署後會重置。
-> 正式環境建議使用 Supabase（免費方案）作為持久化資料庫。
 
 ---
 
@@ -37,12 +34,10 @@ quiz-app/
 │       ├── Day1.md
 │       ├── Day2.md
 │       └── ...
-├── data/
-│   └── quiz_results.db        # SQLite 資料庫（本地）
 ├── utils/
 │   ├── question_parser.py     # 解析 MD 題目
-│   ├── database.py            # 資料庫 CRUD
-│   └── analytics.py          # 成績統計分析
+│   ├── database.py            # Supabase REST API CRUD
+│   └── styles.py              # 共用 CSS 注入
 └── ARCHITECTURE.md
 ```
 
@@ -50,34 +45,34 @@ quiz-app/
 
 ## Markdown 題目格式規範
 
-Obsidian 上傳的 MD 檔案需遵循以下格式，供解析器正確讀取：
+Obsidian 上傳的 MD 檔案實際格式如下：
 
 ```markdown
-## Q1
+1. 題目文字
 
-題目文字寫在這裡。
+   (A) 選項一
 
-- A. 選項一
-- B. 選項二
-- C. 選項三
-- D. 選項四
+   (B) 選項二
 
-**答案：B**
+   (C) 選項三
 
-**解析：**
-解析說明寫在這裡。
+   (D) 選項四
 
----
+2. 下一題...
 
-## Q2
-...
+
+解答與詳細解析
+
+1. (B) 解析說明文字...
+
+2. (A) 解析說明文字...
 ```
 
-- 每題以 `## Q{n}` 開頭
-- 選項以 `- A.` `- B.` `- C.` `- D.` 列出
-- 答案格式：`**答案：{選項字母}**`
-- 解析格式：`**解析：**` 後接說明文字
-- 題目之間以 `---` 分隔
+- 題目區與解析區以「解答與詳細解析」分隔
+- 題號格式：`{n}.`
+- 選項格式：`(A)` `(B)` `(C)` `(D)`
+- 解析格式：`{n}. ({字母}) 解析文字`
+- 題目 ID 格式：`主題__Day_N__題號`（由解析器自動產生，**不得修改**）
 
 ---
 
@@ -134,37 +129,41 @@ Obsidian 上傳的 MD 檔案需遵循以下格式，供解析器正確讀取：
 
 ---
 
-## 資料庫結構
+## 資料庫結構（Supabase / PostgreSQL）
+
+Supabase 專案：https://supabase.com/dashboard/project/svuqajwngmqseqobrkgk
 
 ### users 表
 | 欄位 | 型別 | 說明 |
 |------|------|------|
-| id | INTEGER PK | 自動遞增 |
-| name | TEXT | 使用者名稱 |
-| created_at | DATETIME | 首次登入時間 |
+| id | BIGSERIAL PK | 自動遞增 |
+| name | TEXT UNIQUE | 使用者名稱 |
+| created_at | TIMESTAMPTZ | 首次登入時間 |
 
 ### quiz_sessions 表
 | 欄位 | 型別 | 說明 |
 |------|------|------|
-| id | INTEGER PK | 自動遞增 |
-| user_id | INTEGER FK | 關聯 users |
+| id | BIGSERIAL PK | 自動遞增 |
+| user_id | BIGINT FK | 關聯 users |
 | topic | TEXT | 主題名稱 |
 | units | TEXT | 選擇的單元（JSON 陣列） |
 | total_questions | INTEGER | 總題數 |
 | correct_count | INTEGER | 答對題數 |
-| taken_at | DATETIME | 測驗時間 |
+| taken_at | TIMESTAMPTZ | 測驗時間 |
 
 ### question_results 表
 | 欄位 | 型別 | 說明 |
 |------|------|------|
-| id | INTEGER PK | 自動遞增 |
-| session_id | INTEGER FK | 關聯 quiz_sessions |
-| question_id | TEXT | 題目識別碼（檔案名＋題號） |
+| id | BIGSERIAL PK | 自動遞增 |
+| session_id | BIGINT FK | 關聯 quiz_sessions |
+| question_id | TEXT | 題目識別碼（主題__Day_N__題號） |
 | topic | TEXT | 主題 |
 | unit | TEXT | 單元 |
 | is_correct | BOOLEAN | 是否答對 |
 | user_answer | TEXT | 使用者選擇 |
 | correct_answer | TEXT | 正確答案 |
+
+> **金鑰管理**：Supabase URL 與 anon key 存於 `.streamlit/secrets.toml`（本地，已 gitignore）及 Streamlit Cloud Secrets（線上），不進版本控制。
 
 ---
 
