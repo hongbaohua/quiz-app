@@ -2,7 +2,7 @@
 
 ## 專案概述
 
-以 Streamlit 建立的線上測驗平台。題庫由 Obsidian 匯出的 Markdown 檔案管理，支援多使用者紀錄與成績分析，部署於 Streamlit Community Cloud。
+純前端 HTML/CSS/JS 的線上測驗平台。題庫由 Obsidian 管理的 Markdown 檔案組成，資料持久化至 Supabase（雲端 PostgreSQL），部署於 GitHub Pages（靜態網頁）。
 
 ---
 
@@ -10,10 +10,11 @@
 
 | 層級 | 工具 |
 |------|------|
-| 前端／後端 | Streamlit（Python） |
+| 前端 | HTML5 / CSS3 / Vanilla JS |
 | 題庫格式 | Markdown（Obsidian 產出） |
-| 資料庫 | Supabase（PostgreSQL，雲端持久化） |
-| 部署 | Streamlit Community Cloud |
+| 資料庫 | Supabase（PostgreSQL，REST API） |
+| 圖表庫 | Chart.js 4.4.0 |
+| 部署 | GitHub Pages（靜態，從 `docs/` 資料夾部署） |
 | 版本控制 | GitHub |
 
 ---
@@ -22,30 +23,29 @@
 
 ```
 quiz-app/
-├── app.py                     # 主入口（首頁）
-├── requirements.txt
-├── .streamlit/
-│   └── config.toml            # Streamlit 設定（主題等）
-├── pages/
-│   ├── 1_quiz.py              # 測驗頁
-│   └── 2_dashboard.py         # 考生管理頁
-├── questions/                 # Obsidian 匯出的 MD 題庫
-│   └── 品牌企劃師初級備考/
-│       ├── Day1.md
-│       ├── Day2.md
-│       └── ...
-├── utils/
-│   ├── question_parser.py     # 解析 MD 題目
-│   ├── database.py            # Supabase REST API CRUD
-│   └── styles.py              # 共用 CSS 注入
-└── ARCHITECTURE.md
+├── notes/
+│   ├── ARCHITECTURE.md        # 本文件
+│   └── UI規劃.md              # UI/UX 設計規劃
+├── docs/                      # 網頁部署根目錄（GitHub Pages 從此資料夾部署）
+│   ├── index.html             # 首頁（登入 + 選主題/單元/題數）
+│   ├── quiz.html              # 測驗頁
+│   ├── dashboard.html         # 考生管理頁
+│   ├── css/
+│   │   └── style.css          # 共用樣式
+│   ├── js/
+│   │   ├── config.js          # Supabase URL + anon key
+│   │   ├── db.js              # Supabase CRUD 函式
+│   │   └── parser.js          # Markdown 題庫解析器
+│   └── questions/
+│       ├── manifest.json      # 主題與單元清單（新增題庫時需同步更新）
+│       └── {主題}/
+│           └── *.md           # 題庫檔案
+└── 待做筆記.md
 ```
 
 ---
 
 ## Markdown 題目格式規範
-
-Obsidian 上傳的 MD 檔案實際格式如下：
 
 ```markdown
 1. 題目文字
@@ -72,60 +72,42 @@ Obsidian 上傳的 MD 檔案實際格式如下：
 - 題號格式：`{n}.`
 - 選項格式：`(A)` `(B)` `(C)` `(D)`
 - 解析格式：`{n}. ({字母}) 解析文字`
-- 題目 ID 格式：`主題__Day_N__題號`（由解析器自動產生，**不得修改**）
+- 題目 ID 格式：`主題__Day_N__題號`（由 `parser.js` 的 `_makeId()` 自動產生，**不得修改**）
 
 ---
 
 ## 頁面功能說明
 
-### 首頁（app.py）— 選擇測驗範圍
+### 首頁（index.html）— 選擇測驗範圍
 
-1. **登入／識別使用者**
-   - 輸入名字或使用者代碼（無需密碼，輕量識別）
-
-2. **選擇主題**
-   - 從 `questions/` 子資料夾自動列出可用主題（例如：品牌企劃師初級備考）
-
-3. **選擇單元**
-   - 列出該主題下所有 MD 檔案（例如：Day1、Day2…）
-   - 可勾選多個單元混搭
-
-4. **選擇題數**
-   - 全部題目
-   - 隨機抽取 N 題（使用者輸入數量）
-
+1. **登入／識別使用者**：輸入使用者名稱（無需密碼，輕量識別）
+2. **選擇主題**：從 `questions/manifest.json` 自動列出可用主題
+3. **選擇單元**：列出該主題下所有單元，可勾選多個混搭
+4. **選擇題數**：全部題目 or 隨機抽取 N 題
 5. **開始測驗** → 跳轉至測驗頁
 
 ---
 
-### 測驗頁（pages/1_quiz.py）
+### 測驗頁（quiz.html）
 
-1. **逐題顯示**
-   - 題目文字 + 四選項單選按鈕
-   - 不即時顯示對錯，考完才公布
-
-2. **結束與結果**
-   - 顯示「答對題數 / 總題數」
-   - 預設列出所有**答錯題目**及解析
-   - 可展開查看所有題目解析
-
-3. **紀錄寫入資料庫**
-   - 使用者名稱、主題、單元、日期時間、總題數、答對數、各題作答記錄
+1. **逐題顯示**：題目文字 + 四選項單選，不即時顯示對錯
+2. **題組支援**：「承上題」自動連結上一題情境
+3. **結果呈現**：甜甜圈圖、分數、評等、弱點摘要（單元答對率 < 75%）
+4. **錯題展開**：錯題列表預設開啟，含選項與解析
+5. **儲存至資料庫**：非同步寫入 `quiz_sessions` + `question_results`
 
 ---
 
-### 考生管理頁（pages/2_dashboard.py）
+### 考生管理頁（dashboard.html）
 
-1. **選擇考生**
-   - 下拉選單列出所有曾測驗的使用者
-
-2. **過往測驗紀錄**
-   - 列表顯示：日期、主題、單元、分數、答對率
-
-3. **弱點分析**
-   - 統計答錯次數最多的題目
-   - 依主題／單元分組顯示答對率
-   - 圖表呈現（折線圖：歷次分數趨勢；長條圖：各單元答對率）
+1. **選擇考生**：下拉選單列出所有曾測驗的使用者
+2. **關鍵指標**：測驗次數、平均答對率、累計作答題數、最高答對率
+3. **測驗紀錄表格**：日期、主題、完整單元名稱、分數、答對率、回顧按鈕
+4. **回顧錯題**：每筆紀錄可展開查看該次錯題的題目、選項、解析
+5. **答對率趨勢圖**：Chart.js 折線圖（需 ≥ 2 次）
+6. **弱點診斷**：各單元三色分類（紅/黃/綠）+ 強化建議
+7. **各單元答對率圖**：橫條圖，依準確率排序
+8. **高頻錯題 Top 10**：歷次答錯次數統計
 
 ---
 
@@ -146,7 +128,7 @@ Supabase 專案：https://supabase.com/dashboard/project/svuqajwngmqseqobrkgk
 | id | BIGSERIAL PK | 自動遞增 |
 | user_id | BIGINT FK | 關聯 users |
 | topic | TEXT | 主題名稱 |
-| units | TEXT | 選擇的單元（JSON 陣列） |
+| units | TEXT | 選擇的單元（JSON 陣列，內容為單元代號如 "Day 1"） |
 | total_questions | INTEGER | 總題數 |
 | correct_count | INTEGER | 答對題數 |
 | taken_at | TIMESTAMPTZ | 測驗時間 |
@@ -156,25 +138,38 @@ Supabase 專案：https://supabase.com/dashboard/project/svuqajwngmqseqobrkgk
 |------|------|------|
 | id | BIGSERIAL PK | 自動遞增 |
 | session_id | BIGINT FK | 關聯 quiz_sessions |
-| question_id | TEXT | 題目識別碼（主題__Day_N__題號） |
+| question_id | TEXT | 題目識別碼（格式：`主題__Day_N__題號`） |
 | topic | TEXT | 主題 |
-| unit | TEXT | 單元 |
+| unit | TEXT | 單元代號 |
 | is_correct | BOOLEAN | 是否答對 |
-| user_answer | TEXT | 使用者選擇 |
-| correct_answer | TEXT | 正確答案 |
+| user_answer | TEXT | 使用者選擇（A/B/C/D） |
+| correct_answer | TEXT | 正確答案（A/B/C/D） |
 
-> **金鑰管理**：Supabase URL 與 anon key 存於 `.streamlit/secrets.toml`（本地，已 gitignore）及 Streamlit Cloud Secrets（線上），不進版本控制。
+> **金鑰管理**：Supabase URL 與 anon key 存於 `docs/js/config.js`，已加入 `.gitignore` 中的 secrets.toml（本地開發用）。
 
 ---
 
-## 本地啟動
+## 禁止修改（保護考生紀錄）
+
+### 1. `js/parser.js` — `_makeId()` 函式
+- 禁止修改 `question_id` 的產生格式（格式：`主題__Day_N__題號`）
+- 修改後舊紀錄的 question_id 將無法對應現有題庫
+
+### 2. Supabase 資料表結構
+- 禁止新增、刪除、重新命名 `users`、`quiz_sessions`、`question_results` 三張表的欄位
+- 若需擴充欄位，必須先告知使用者並進行資料遷移
+
+---
+
+## 本地測試
+
+瀏覽器直接開啟 `index.html` 無法 fetch 本地檔案（CORS 限制），需啟動本地伺服器：
 
 ```bash
-cd C:\Users\Master\Projects\quiz-app
-streamlit run app.py
+cd C:\Users\Master\Projects\quiz-app\docs
+python -m http.server 8080
+# 開啟 http://localhost:8080
 ```
-
-本地網址：http://localhost:8501
 
 ---
 
@@ -192,23 +187,22 @@ git push
 
 ---
 
-## 線上部署（Streamlit Community Cloud）
+## 線上部署（GitHub Pages）
 
-管理頁面：https://share.streamlit.io
-
-線上網址：https://quiz-app-tjny6p3phdsrrbci2cijtx.streamlit.app
+管理頁面：https://github.com/hongbaohua/quiz-app/settings/pages
 
 部署設定：
 - Repository：`hongbaohua/quiz-app`
 - Branch：`master`
-- Main file：`app.py`
+- 來源資料夾：`/docs`
 
-> 每次推送至 GitHub 後，Streamlit Cloud 會自動重新部署。
+> 每次推送至 GitHub 後，GitHub Pages 會自動重新部署。
 
 ---
 
 ## 題庫更新流程
 
-1. 在 Obsidian 編輯或新增 MD 題目檔案
-2. 將檔案放入 `questions/{主題}/` 資料夾
-3. 推送至 GitHub → Streamlit 自動重新部署，題庫即時生效
+1. 在 Obsidian 建立或編輯 `.md` 題庫檔案
+2. 將檔案放入 `docs/questions/{主題}/` 資料夾
+3. **更新 `docs/questions/manifest.json`**，新增對應的 `{ "unit": "Day N", "file": "完整檔名.md" }`
+4. 推送至 GitHub → GitHub Pages 自動重新部署，題庫即時生效
